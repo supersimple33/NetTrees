@@ -17,7 +17,7 @@ class SNTPointLocation(PointLocation):
     ----------
     tree : SNT
         A semi-compressed local net-tree created for one point, which consists of a jump 
-        from root at level +\infty to the leaf at level -\infty.
+        from root at level +\\infty to the leaf at level -\\infty.
     points: list
         A list of points that are not inserted to the tree.
     """
@@ -26,7 +26,7 @@ class SNTPointLocation(PointLocation):
         # A dictionary from uninserted points to nodes of the tree, which provides information about centers
         self._nn = {p : tree.root for p in points}
         # A mapping maintaining the distance of each uninserted point to its center
-        self._nndist = {p : None for p in points}
+        self._nndist = dict.fromkeys(points)
         # A dictionary from nodes to uninserted points. 
         # For each node, it gives the set of all uninserted points in its inner cell
         self._rnn_in = {tree.root : set(points)}
@@ -51,8 +51,12 @@ class SNTPointLocation(PointLocation):
         set
             The uninserted points in the inner cell of given nodes.
         """
-        return self._rnn_in[nodes] if isinstance(nodes, Node) else \
-                set.union(*(self._rnn_in[node] for node in nodes))
+        if isinstance(nodes, Node):
+            return self._rnn_in[nodes]
+        points = set()
+        for node in nodes:
+            points.update(self._rnn_in[node])
+        return points
 
     def rnn_out(self, nodes):
         """
@@ -68,8 +72,12 @@ class SNTPointLocation(PointLocation):
         set
             The uninserted points in the outer cell of given nodes.
         """
-        return self._rnn_out[nodes] if isinstance(nodes, Node) else \
-                set.union(*(self._rnn_out[node] for node in nodes))
+        if isinstance(nodes, Node):
+            return self._rnn_out[nodes]
+        points = set()
+        for node in nodes:
+            points.update(self._rnn_out[node])
+        return points
 
     def rnn(self, nodes):
         """
@@ -120,7 +128,10 @@ class SNTPointLocation(PointLocation):
         float
             The distance between the uninserted point and its center.
         """
-        return self._nndist[point] or dist(nn or self._nn[point], point)
+        cached = self._nndist[point]
+        if cached is not None:
+            return cached
+        return dist(nn or self._nn[point], point)
     
     def removepoint(self, point):
         """
@@ -186,7 +197,9 @@ class SNTPointLocation(PointLocation):
             The new inserted node.
         """
         self.addnode(node)
-        for point in self.rnn_out(rel(par(node)) | ch(rel(par(node))) | ch(rel(node))):
+        parent_relatives = rel(par(node))
+        touched_nodes = parent_relatives | ch(parent_relatives) | ch(rel(node))
+        for point in self.rnn_out(touched_nodes):
             self.basictouchno += 1
             self.trytochangernn(point, node)
 
@@ -223,10 +236,10 @@ class SNTPointLocation(PointLocation):
             The precomputed distance between point and tonode.
             If todist==None, then the method computed the distance.
         """
-        todist = todist or dist(tonode, point)
+        todist = todist if todist is not None else dist(tonode, point)
         self._nn[point] = tonode
         self._nndist[point] = todist
-        if todist <= self.tree.cp * (self.tree.tau ** (tonode.level - 1)) / 2:
+        if todist <= self.tree.cp * self.tree._taupow(tonode.level - 1) / 2:
             self._rnn_in[tonode].add(point)
         else:
             self._rnn_out[tonode].add(point)
@@ -245,7 +258,8 @@ class SNTPointLocation(PointLocation):
             The node that may be the new center for the uninserted point.
         """
         fromnode = self._nn[point]
-        todist = self.nndist(point) if fromnode.point == tonode.point else dist(tonode, point)
+        fromdist = self.nndist(point)
+        todist = fromdist if fromnode.point == tonode.point else dist(tonode, point)
         if self.tree.isrel(tonode, point, todist):
             '''
             we change the center of a point if either:
@@ -255,5 +269,5 @@ class SNTPointLocation(PointLocation):
                 and the next center is closer to the point than its current center
             '''
             if (fromnode.point == tonode.point and fromnode.level > tonode.level) or \
-                (fromnode.point != tonode.point and todist < self.nndist(point)):
+                (fromnode.point != tonode.point and todist < fromdist):
                 self.changernn(point, fromnode, tonode, todist)

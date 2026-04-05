@@ -102,19 +102,35 @@ of just individuals.
 """
 
 def ch(nodes):
-    return nodes.ch if isinstance(nodes, Node) else \
-            set.union(*(node.ch for node in nodes))
+    if isinstance(nodes, Node):
+        return nodes.ch
+    children = set()
+    for node in nodes:
+        children.update(node.ch)
+    return children
 
 def rel(nodes):
-    return nodes.rel if isinstance(nodes, Node) else \
-            set.union(*(node.rel for node in nodes))
+    if isinstance(nodes, Node):
+        return nodes.rel
+    relatives = set()
+    for node in nodes:
+        relatives.update(node.rel)
+    return relatives
 
 def par(nodes):
     return nodes.par if isinstance(nodes, Node) else \
             {node.par for node in nodes if node.par is not None}
 
 def nearest(node, others):        
-    return min(others, key=lambda n:node.point.distto(n.point))
+    nearestnode = None
+    nearestdist = None
+    point = node.point
+    for other in others:
+        currentdist = point.distto(other.point)
+        if nearestdist is None or currentdist < nearestdist:
+            nearestnode = other
+            nearestdist = currentdist
+    return nearestnode
 
 def dist(node, other):
     return node.point.distto(other if isinstance(other, Point) else other.point)

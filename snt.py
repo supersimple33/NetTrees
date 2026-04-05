@@ -21,11 +21,22 @@ class SNT:
         self.cp = config.arithmatic.cast(cp)
         self.cc = config.arithmatic.cast(cc)
         self.cr = config.arithmatic.cast(cr or (2 * cc * tau) / (tau - 4))
+        self._tau_pow_cache = {}
+        self._tau_pow_base = self.tau
         self.root = None
+
+    def _taupow(self, level):
+        # Keep the cache coherent when callers mutate tau directly.
+        if self.tau != self._tau_pow_base:
+            self._tau_pow_cache.clear()
+            self._tau_pow_base = self.tau
+        if level not in self._tau_pow_cache:
+            self._tau_pow_cache[level] = self.tau ** level
+        return self._tau_pow_cache[level]
 
     def setroot(self, point):
         """
-        Initializes a net-tree with one point as a jump from level +\infty to -\infty.
+        Initializes a net-tree with one point as a jump from level +\\infty to -\\infty.
         
         Parameters:
         ----------
@@ -79,7 +90,7 @@ class SNT:
         level = self.minlevelrelatives(closest, point, dst)
         # If the packing property does not hold at this level, 
         # then the node should be inserted in exactly one level down 
-        if dst <= self.cp * self.tau ** level:
+        if dst <= self.cp * self._taupow(level):
             level -= 1
         if level < closest.level:
             # If there is a jump, then we should split it
@@ -87,7 +98,7 @@ class SNT:
                 closest = self.splitbelow(closest, level)
             # Otehrwise, find the node associated to the same point
             else:
-                closest = [n for n in closest.ch if n.point == closest.point][0]
+                closest = next(n for n in closest.ch if n.point == closest.point)
         node = Node(point, level)
         self.update(node, closest)
         lowest = node
@@ -245,7 +256,7 @@ class SNT:
             Returns True is the distance between `node` and its parent is 
             not greater than c_c\tau**(node.level+1).
         """
-        return dist(node, node.par) <= self.cc * (self.tau ** (node.level + 1))
+        return dist(node, node.par) <= self.cc * self._taupow(node.level + 1)
 
     def isrel(self, node, other, computeddist=None):
         """
@@ -264,7 +275,8 @@ class SNT:
         Returns:
             bool
         """
-        return (computeddist or dist(node, other)) <= self.cr * (self.tau ** node.level)
+        distance = computeddist if computeddist is not None else dist(node, other)
+        return distance <= self.cr * self._taupow(node.level)
 
     def minlevelrelatives(self, first, second, computeddist=None):
         """
@@ -284,8 +296,8 @@ class SNT:
         -------
         float
         """
-        return config.arithmatic.ceil(config.arithmatic.log(
-                    (computeddist or dist(first, second)) / self.cr, self.tau))
+        distance = computeddist if computeddist is not None else dist(first, second)
+        return config.arithmatic.ceil(config.arithmatic.log(distance / self.cr, self.tau))
 
     def __str__(self):
         return str(self.root)
