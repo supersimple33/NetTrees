@@ -37,5 +37,14 @@ class TestPoint(unittest.TestCase):
         self.assertEqual(p.distto(r), 12)
         self.assertEqual(p.distto(q, r), 4)        
 
+    def testcachedzerodistance(self):
+        metric = Euclidean(cachedist=True)
+        p = Point([1, 2, 3], metric)
+        q = Point([1, 2, 3], metric)
+        self.assertEqual(p.distto(q), 0)
+        self.assertEqual(metric.counter, 0)
+        self.assertEqual(p.distto(q), 0)
+        self.assertEqual(metric.counter, 0)
+
 if __name__ == '__main__':
     unittest.main()
